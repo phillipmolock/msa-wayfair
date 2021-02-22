@@ -1,13 +1,13 @@
 # MSA Shopping Feed Audit
-# Last Updated 2/19/2021
-import os, csv
+# Last Updated 2/22/2021
+import os, csv, sys
 from statistics import median, mean
 
 # ADVERTISER_NAME is used in the output files
-ADVERTISER_NAME = 'AdvertiserName'
+ADVERTISER_NAME = "AdvertiserName"
 
 # SHOPPING_FEED is the direct path to the shopping feed you'd like to audit
-SHOPPING_FEED = 'Path\\to\shopping\\feed.txt'
+SHOPPING_FEED = 'path/to/shopping/feed.txt'
 
 # SHOPPING_FEED_DELIMITER is the value used to separate columns, the most common is tab (\t)
 SHOPPING_FEED_DELIMITER = '\t'
@@ -23,7 +23,7 @@ TRIMMED_ROW_STOP = 100000
 # TEST_RUN is used if you'd like to test the audit on only a small number of offers (defined in TEST_RUN_ROW_STOP). This can be helpful
 # 	as many feeds are very large and will take a while to audit and doing a test run can allow you to see the output for a small portion
 #	of the feed before doing an entire run.
-TEST_RUN = True
+TEST_RUN = False
 TEST_RUN_ROW_STOP = 100000
 
 # OUTPUT_FILE_NAMES is a dictionary mapping the individual output files to their file names
@@ -50,7 +50,7 @@ OUTPUT_FILE_HEADERS = {
 }
 
 # OUTPUT_DIRECTORY is the direct path to the output folder where the results of the audit will be stored
-OUTPUT_DIRECTORY = 'output'
+OUTPUT_DIRECTORY = 'G:\Wayfair Python Demo\output'
 
 # main checks for the existence of the SHOPPING_FEED, OUTPUT_DIRECTORY, then runs the feed audit and saves the results
 def main():
@@ -62,6 +62,140 @@ def main():
 		title_counts, brand_counts, prod_category_counts, prod_type_counts, custom_label_counts, variant_counts, summary_counts = audit_shopping_feed()
 		save_results(title_counts, brand_counts, prod_category_counts, prod_type_counts, custom_label_counts, variant_counts, summary_counts)
 
+# header check standardizes what values the feed is auditing to account for the fact 
+def header_check(header):
+	header = [field.lower() for field in header]
+	header_field_mapping = {
+		# id
+		'id':{
+		'matched_value':None,
+		'alternative_values':['item_id'],
+		'in_feed_header':False
+		},
+		# price
+		'price':{
+		'matched_value':None,
+		'alternative_values':['price'],
+		'in_feed_header':False
+		},
+		# link
+		'link':{
+		'matched_value':None,
+		'alternative_values':['link'],
+		'in_feed_header':False
+		},
+		# image_link
+		'image_link':{
+		'matched_value':None,
+		'alternative_values':['image_link'],
+		'in_feed_header':False
+		},
+		# title
+		'title':{
+		'matched_value':None,
+		'alternative_values':['title'],
+		'in_feed_header':False
+		},
+		# title
+		'price':{
+		'matched_value':None,
+		'alternative_values':['price'],
+		'in_feed_header':False
+		},
+		# title
+		'description':{
+		'matched_value':None,
+		'alternative_values':['description'],
+		'in_feed_header':False
+		},
+		# brand
+		'brand':{
+		'matched_value':None,
+		'alternative_values':['brand'],
+		'in_feed_header':False
+		},
+		# size
+		'size':{
+		'matched_value':None,
+		'alternative_values':['size'],
+		'in_feed_header':False
+		},
+		# color
+		'color':{
+		'matched_value':None,
+		'alternative_values':['color'],
+		'in_feed_header':False
+		},
+		# gender
+		'gender':{
+		'matched_value':None,
+		'alternative_values':['gender'],
+		'in_feed_header':False
+		},
+		# product category
+		'product_category':{
+		'matched_value':None,
+		'alternative_values':['product_category','google_product_category'],
+		'in_feed_header':False
+		},
+		# product type
+		'product_type':{
+		'matched_value':None,
+		'alternative_values':['product_type'],
+		'in_feed_header':False
+		},
+		# custom label 0
+		'custom_label_0':{
+		'matched_value': None,
+		'alternative_values':['custom_label_0'],
+		'in_feed_header':False
+		},
+		# custom label 1
+		'custom_label_1':{
+		'matched_value': None,
+		'alternative_values':['custom_label_1'],
+		'in_feed_header':False
+		},
+		# custom label 2
+		'custom_label_2':{
+		'matched_value': None,
+		'alternative_values':['custom_label_2'],
+		'in_feed_header':False
+		},
+		# custom label 3
+		'custom_label_3':{
+		'matched_value': None,
+		'alternative_values':['custom_label_3'],
+		'in_feed_header':False
+		},
+		# custom label 4
+		'custom_label_4':{
+		'matched_value':None,
+		'alternative_values':['custom_label_4'],
+		'in_feed_header':False
+		},
+	}
+	# loop through header fields and see if they exist in the feed header, checking for alternative values
+	for field, field_details in header_field_mapping.items():
+		if field in header:			
+			field_details['matched_value'] = field
+			field_details['in_feed_header'] = True
+		else:
+			for alternative_value in field_details['alternative_values']:
+				if alternative_value in header:
+					field_details['matched_value'] = alternative_value
+					field_details['in_feed_header'] = True
+					# break in case a feed has multiple alternative values for a field
+					break
+	# make sure a feed has the minimum values of id, title, 
+	mandatory_fields = ['id','title','price','link','image_link']
+	mandatory_fields_missing = [field for field, field_details in header_field_mapping.items() if not field_details['in_feed_header'] and field in mandatory_fields]
+
+	if mandatory_fields_missing:
+		print(f"[Error] Cannot audit feed, missing one of the mandatory fields {mandatory_fields}.\n\tMissing field(s): {mandatory_fields_missing}")
+		sys.exit()
+
+	return header_field_mapping
 # audit_shopping_feed loops through the provided shopping feed auditing for opportunities
 def audit_shopping_feed():
 	# title_counts is the item ids by title
@@ -93,7 +227,15 @@ def audit_shopping_feed():
 		'title_lengths':[],
 		'description_lengths':[],
 		'feed_header':None,
+		'no_brand':0,
+		'no_price':0,
+		'no_id':0,
+		'no_description':0,
+		'no_title':0,
+		'no_link':0,
+		'no_image_link':0,
 	}
+
 	trimmed_full_path = os.path.join(OUTPUT_DIRECTORY,OUTPUT_FILE_NAMES['trimmed_shopping_feed'])
 	with open(trimmed_full_path, 'w', newline='') as trimmed_feed_out:
 		csv_writer = csv.writer(trimmed_feed_out)
@@ -101,7 +243,7 @@ def audit_shopping_feed():
 			shopping_feed_csv_reader = csv.reader(feed_in, delimiter=SHOPPING_FEED_DELIMITER)
 			header = [header_field.lower() for header_field in next(shopping_feed_csv_reader)]
 			csv_writer.writerow(header)
-			print(header)
+			header_field_mapping = header_check(header)
 			summary_counts['feed_header'] = header
 			
 			# row_count is used to keep track of how many offers are in a feed
@@ -121,11 +263,27 @@ def audit_shopping_feed():
 					csv_writer.writerow(row)
 				
 				# Core Fields
-				item_id = row[header.index('id')]
-				title = row[header.index('title')]
-				brand = row[header.index('brand')]
-				description = row[header.index('description')]
-				
+				# item_id = row[header.index('id')]
+				item_id = row[header.index(header_field_mapping['id']['matched_value'])]
+				title = row[header.index(header_field_mapping['title']['matched_value'])]
+				brand = row[header.index(header_field_mapping['brand']['matched_value'])]
+				description = row[header.index(header_field_mapping['description']['matched_value'])]
+				link = row[header.index(header_field_mapping['link']['matched_value'])]
+				image_link = row[header.index(header_field_mapping['image_link']['matched_value'])]
+				# title = row[header.index('title')]
+				# brand = row[header.index('brand')]
+				# description = row[header.index('description')]
+				# save counts if no id, brand, title, price, or description
+				if not item_id:
+					summary_counts['no_id'] += 1
+				if not brand:
+					summary_counts['no_brand'] += 1
+				if not title:
+					summary_counts['no_title'] += 1
+				if not description:
+					summary_counts['no_description'] += 1
+				if not image_link:
+					summary_counts['no_image_link'] += 1
 				# Save lengths of description and title
 				summary_counts['description_lengths'].append(len(description))
 				summary_counts['title_lengths'].append(len(title))
@@ -147,83 +305,100 @@ def audit_shopping_feed():
 					brand_counts[brand] += 1
 				
 				# Product Variant Fields
-				size = row[header.index('size')]
-				color = row[header.index('color')]			
-				gender = row[header.index('gender')]
-				
 				# Increment count if size, color, or gender are not in the title
-				if size.lower() not in title.lower():
-					summary_counts['size_not_in_title'] += 1
-				if color.lower() not in title.lower():
-					summary_counts['color_not_in_title'] += 1
-				if gender.lower() not in title.lower():
-					summary_counts['gender_not_in_title'] += 1
-				
 				# Save size, color, or gender in variant_counts dictionary
-				if size not in variant_counts['size']:
-					variant_counts['size'][size] = 1
-				else:
-					variant_counts['size'][size] += 1
-				
-				if color not in variant_counts['color']:
-					variant_counts['color'][color] = 1
-				else:
-					variant_counts['color'][color] += 1
-				
-				if gender not in variant_counts['gender']:
-					variant_counts['gender'][gender] = 1
-				else:
-					variant_counts['gender'][gender] += 1
-				
-				# Product Type and Category Fields
-				prod_type = row[header.index('product_type')]
-				if prod_type not in prod_type_counts:
-					prod_type_counts[prod_type] = 1
-				else:
-					prod_type_counts[prod_type] += 1									
-				
-				if 'product_category' in header:
-					prod_category = row[header.index('product_category')]
-				elif 'google_product_category' in header:
-					prod_category = row[header.index('google_product_category')]
+				# size
+				if header_field_mapping['size']['in_feed_header']:
+					size = row[header.index(header_field_mapping['size']['matched_value'])]
+					if size.lower() not in title.lower():
+						summary_counts['size_not_in_title'] += 1
+					if size not in variant_counts['size']:
+						variant_counts['size'][size] = 1
+					else:
+						variant_counts['size'][size] += 1
+				# color
+				if header_field_mapping['color']['in_feed_header']:
+					color = row[header.index(header_field_mapping['color']['matched_value'])]
+					if color.lower() not in title.lower():
+						summary_counts['color_not_in_title'] += 1
+					if color not in variant_counts['color']:
+						variant_counts['color'][color] = 1
+					else:
+						variant_counts['color'][color] += 1
+				# gender
+				if header_field_mapping['gender']['in_feed_header']:
+					gender = row[header.index(header_field_mapping['gender']['matched_value'])]
+					if gender.lower() not in title.lower():
+						summary_counts['gender_not_in_title'] += 1
+					if gender not in variant_counts['gender']:
+						variant_counts['gender'][gender] = 1
+					else:
+						variant_counts['gender'][gender] += 1
+				# color = row[header.index('color')]			
+				# gender = row[header.index('gender')]
 
-				if prod_category not in prod_category_counts:
-					prod_category_counts[prod_category] = 1
-				else:
-					prod_category_counts[prod_category] += 1
+				# Product Type and Category Fields
+				if header_field_mapping['product_type']['in_feed_header']:
+					prod_type = row[header.index('product_type')]
+					if prod_type not in prod_type_counts:
+						prod_type_counts[prod_type] = 1
+					else:
+						prod_type_counts[prod_type] += 1									
+				
+				# product category				
+				if header_field_mapping['product_category']['in_feed_header']:
+					prod_category = row[header.index('product_category')]
+	
+					if prod_category not in prod_category_counts:
+						prod_category_counts[prod_category] = 1
+					else:
+						prod_category_counts[prod_category] += 1
 				
 				# Custom Label Fields
-				custom_label_0 = row[header.index('custom_label_0')]
-				custom_label_1 = row[header.index('custom_label_1')]
-				custom_label_2 = row[header.index('custom_label_2')]
-				custom_label_3 = row[header.index('custom_label_3')]
-				custom_label_4 = row[header.index('custom_label_4')]
-				
 				# custom label 0
-				if custom_label_0 not in custom_label_counts['custom_label_0']:
-					custom_label_counts['custom_label_0'][custom_label_0] = 1
-				else:
-					custom_label_counts['custom_label_0'][custom_label_0] += 1
+				if header_field_mapping['custom_label_0']['in_feed_header']:
+					custom_label_0 = row[header.index(header_field_mapping['custom_label_0']['matched_value'])]					
+					if custom_label_0 not in custom_label_counts['custom_label_0']:
+						custom_label_counts['custom_label_0'][custom_label_0] = 1
+					else:
+						custom_label_counts['custom_label_0'][custom_label_0] += 1
 				# custom label 1
-				if custom_label_1 not in custom_label_counts['custom_label_1']:
-					custom_label_counts['custom_label_1'][custom_label_1] = 1
-				else:
-					custom_label_counts['custom_label_1'][custom_label_1] += 1
+				if header_field_mapping['custom_label_1']['in_feed_header']:
+					custom_label_1 = row[header.index(header_field_mapping['custom_label_1']['matched_value'])]
+					if custom_label_1 not in custom_label_counts['custom_label_1']:
+						custom_label_counts['custom_label_1'][custom_label_1] = 1
+					else:
+						custom_label_counts['custom_label_1'][custom_label_1] += 1
 				# custom label 2
-				if custom_label_2 not in custom_label_counts['custom_label_2']:
-					custom_label_counts['custom_label_2'][custom_label_2] = 1
-				else:
-					custom_label_counts['custom_label_2'][custom_label_2] += 1
+				if header_field_mapping['custom_label_2']['in_feed_header']:
+					custom_label_2 = row[header.index(header_field_mapping['custom_label_2']['matched_value'])]
+					if custom_label_2 not in custom_label_counts['custom_label_2']:
+						custom_label_counts['custom_label_2'][custom_label_2] = 1
+					else:
+						custom_label_counts['custom_label_2'][custom_label_2] += 1
 				# custom label 3
-				if custom_label_3 not in custom_label_counts['custom_label_3']:
-					custom_label_counts['custom_label_3'][custom_label_3] = 1
-				else:
-					custom_label_counts['custom_label_3'][custom_label_3] += 1
+				if header_field_mapping['custom_label_3']['in_feed_header']:
+					custom_label_3 = row[header.index(header_field_mapping['custom_label_3']['matched_value'])]
+					if custom_label_3 not in custom_label_counts['custom_label_3']:
+						custom_label_counts['custom_label_3'][custom_label_3] = 1
+					else:
+						custom_label_counts['custom_label_3'][custom_label_3] += 1
+				# custom label 4	
+				if header_field_mapping['custom_label_4']['in_feed_header']:
+					custom_label_4 = row[header.index(header_field_mapping['custom_label_4']['matched_value'])]
+					if custom_label_4 not in custom_label_counts['custom_label_4']:
+						custom_label_counts['custom_label_4'][custom_label_4] = 1
+					else:
+						custom_label_counts['custom_label_4'][custom_label_4] += 1		
+
+				# custom label 1
+
+				# custom label 2
+
+				# custom label 3
+
 				# custom label 4
-				if custom_label_4 not in custom_label_counts['custom_label_4']:
-					custom_label_counts['custom_label_4'][custom_label_4] = 1
-				else:
-					custom_label_counts['custom_label_4'][custom_label_4] += 1		
+
 				# Update total offers by row count
 				summary_counts['total_offers'] = row_count
 	return 	title_counts, brand_counts, prod_category_counts, prod_type_counts, custom_label_counts, variant_counts, summary_counts
@@ -341,7 +516,35 @@ def save_results(title_counts, brand_counts, prod_category_counts, prod_type_cou
 		
 		# gender not in title
 		gender_counts_percentage = round(100 * (summary_counts['gender_not_in_title']/total_offers),2)
-		csv_writer.writerow(['gender not in title', summary_counts['gender_not_in_title'],f'{gender_counts_percentage}%'])		
+		csv_writer.writerow(['gender not in title', summary_counts['gender_not_in_title'],f'{gender_counts_percentage}%'])	
+
+		# no brand provided at all 
+		no_brand_percentage = round(100 * (summary_counts['no_brand']/total_offers),2)
+		csv_writer.writerow(['offers with no brand provided', summary_counts['no_brand'],f'{no_brand_percentage}%'])	
+		
+		# no price provided at all 
+		no_price_percentage = round(100 * (summary_counts['no_price']/total_offers),2)
+		csv_writer.writerow(['offers with no price provided', summary_counts['no_price'],f'{no_price_percentage}%'])	
+		
+		# no id provided at all 
+		no_id_percentage = round(100 * (summary_counts['no_id']/total_offers),2)
+		csv_writer.writerow(['offers with no id provided', summary_counts['no_id'],f'{no_id_percentage}%'])	
+		
+		# no description provided at all 
+		no_description_percentage = round(100 * (summary_counts['no_description']/total_offers),2)
+		csv_writer.writerow(['offers with no description provided', summary_counts['no_description'],f'{no_description_percentage}%'])	
+		
+		# no title provided at all 
+		no_title_percentage = round(100 * (summary_counts['no_title']/total_offers),2)
+		csv_writer.writerow(['offers with no title provided', summary_counts['no_title'],f'{no_title_percentage}%'])			
+		
+		# no link provided at all 
+		no_link_percentage = round(100 * (summary_counts['no_link']/total_offers),2)
+		csv_writer.writerow(['offers with no link provided', summary_counts['no_link'],f'{no_link_percentage}%'])			
+		
+		# no image link provided at all 
+		no_image_link_percentage = round(100 * (summary_counts['no_image_link']/total_offers),2)
+		csv_writer.writerow(['offers with no image link provided', summary_counts['no_image_link'],f'{no_image_link_percentage}%'])				
 
 # If run directly, execute main function
 if __name__ == "__main__":
